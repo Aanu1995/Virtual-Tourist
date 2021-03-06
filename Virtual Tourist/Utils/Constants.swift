@@ -12,4 +12,8 @@ struct Constants {
     struct UserDefaults {
         static let region = "region"
     }
+    
+    struct SegueIdentifier{
+        static let mapViewToPhotoView = "mapViewToPhotoView"
+    }
 }

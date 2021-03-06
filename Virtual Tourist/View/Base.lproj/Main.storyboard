@@ -5,6 +5,7 @@
         <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="17703"/>
         <capability name="Safe area layout guides" minToolsVersion="9.0"/>
         <capability name="System colors in document resources" minToolsVersion="11.0"/>
+        <capability name="collection view cell content view" minToolsVersion="11.0"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <scenes>
@@ -51,7 +52,7 @@
                     <navigationItem key="navigationItem" id="fRq-Ov-Tba"/>
                     <connections>
                         <outlet property="touristMapView" destination="bPy-g2-G80" id="O7f-Oo-KuZ"/>
-                        <segue destination="e8q-0b-nEs" kind="show" identifier="PhotoViewSegue" id="NU2-Dv-aio"/>
+                        <segue destination="e8q-0b-nEs" kind="show" identifier="mapViewToPhotoView" id="NU2-Dv-aio"/>
                     </connections>
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="dkx-z0-nzr" sceneMemberID="firstResponder"/>
@@ -65,16 +66,62 @@
                     <view key="view" contentMode="scaleToFill" id="4fQ-OO-fKH">
                         <rect key="frame" x="0.0" y="0.0" width="414" height="896"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <mapView clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="scaleToFill" mapType="standard" translatesAutoresizingMaskIntoConstraints="NO" id="h4U-Uk-NCQ">
+                                <rect key="frame" x="0.0" y="88" width="414" height="179"/>
+                                <connections>
+                                    <outlet property="delegate" destination="e8q-0b-nEs" id="D0M-Xx-UEP"/>
+                                </connections>
+                            </mapView>
+                            <collectionView clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="scaleToFill" dataMode="prototypes" translatesAutoresizingMaskIntoConstraints="NO" id="c0q-MU-GjY">
+                                <rect key="frame" x="0.0" y="275" width="414" height="587"/>
+                                <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                                <collectionViewFlowLayout key="collectionViewLayout" automaticEstimatedItemSize="YES" minimumLineSpacing="10" minimumInteritemSpacing="10" id="YQc-C3-Isx">
+                                    <size key="itemSize" width="128" height="128"/>
+                                    <size key="headerReferenceSize" width="0.0" height="0.0"/>
+                                    <size key="footerReferenceSize" width="0.0" height="0.0"/>
+                                    <inset key="sectionInset" minX="0.0" minY="0.0" maxX="0.0" maxY="0.0"/>
+                                </collectionViewFlowLayout>
+                                <cells>
+                                    <collectionViewCell opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" id="kmS-2j-xt8">
+                                        <rect key="frame" x="0.0" y="0.0" width="128" height="128"/>
+                                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                                        <collectionViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" insetsLayoutMarginsFromSafeArea="NO" id="rCc-lg-agZ">
+                                            <rect key="frame" x="0.0" y="0.0" width="128" height="128"/>
+                                            <autoresizingMask key="autoresizingMask"/>
+                                        </collectionViewCellContentView>
+                                    </collectionViewCell>
+                                </cells>
+                                <connections>
+                                    <outlet property="dataSource" destination="e8q-0b-nEs" id="EZu-ph-Lnn"/>
+                                    <outlet property="delegate" destination="e8q-0b-nEs" id="0Lm-Yu-CVE"/>
+                                </connections>
+                            </collectionView>
+                        </subviews>
                         <viewLayoutGuide key="safeArea" id="mEG-xK-S2A"/>
                         <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                        <constraints>
+                            <constraint firstItem="h4U-Uk-NCQ" firstAttribute="trailing" secondItem="mEG-xK-S2A" secondAttribute="trailing" id="IER-0t-8rU"/>
+                            <constraint firstItem="h4U-Uk-NCQ" firstAttribute="top" secondItem="mEG-xK-S2A" secondAttribute="top" id="IPU-Kr-6qX"/>
+                            <constraint firstItem="c0q-MU-GjY" firstAttribute="top" secondItem="h4U-Uk-NCQ" secondAttribute="bottom" constant="8" symbolic="YES" id="K0e-lc-CIt"/>
+                            <constraint firstItem="c0q-MU-GjY" firstAttribute="leading" secondItem="mEG-xK-S2A" secondAttribute="leading" id="UtM-25-O6M"/>
+                            <constraint firstItem="h4U-Uk-NCQ" firstAttribute="height" secondItem="4fQ-OO-fKH" secondAttribute="height" multiplier="0.2" id="VKK-Va-psv"/>
+                            <constraint firstItem="h4U-Uk-NCQ" firstAttribute="leading" secondItem="mEG-xK-S2A" secondAttribute="leading" id="bHb-BT-Z8h"/>
+                            <constraint firstItem="c0q-MU-GjY" firstAttribute="bottom" secondItem="mEG-xK-S2A" secondAttribute="bottom" id="noA-Qk-nZl"/>
+                            <constraint firstItem="c0q-MU-GjY" firstAttribute="trailing" secondItem="mEG-xK-S2A" secondAttribute="trailing" id="rX4-zS-kH2"/>
+                        </constraints>
                     </view>
                     <navigationItem key="navigationItem" id="qh8-lP-vCo">
-                        <barButtonItem key="backBarButtonItem" title="Ok" id="LMB-gd-Kxd"/>
+                        <barButtonItem key="backBarButtonItem" id="LMB-gd-Kxd"/>
                     </navigationItem>
+                    <connections>
+                        <outlet property="collectionView" destination="c0q-MU-GjY" id="AJJ-gz-C1k"/>
+                        <outlet property="mapView" destination="h4U-Uk-NCQ" id="Zlt-sU-r6z"/>
+                    </connections>
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="RIB-iH-0Ep" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
             </objects>
-            <point key="canvasLocation" x="1074" y="45"/>
+            <point key="canvasLocation" x="1073.913043478261" y="44.866071428571423"/>
         </scene>
     </scenes>
     <resources>
