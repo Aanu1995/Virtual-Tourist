@@ -8,11 +8,12 @@
 import UIKit
 import MapKit
 
-class MapViewController: UIViewController{
+class MapViewController: UIViewController, HapticFeeback {
     
     // MARK: IBOutlets
     
     @IBOutlet weak var touristMapView: MKMapView!
+    let localStorage: LocalStorage = LocalStorageImpl()
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -27,13 +28,15 @@ class MapViewController: UIViewController{
        
         // add a gesture recognizer to the map
         let longPressRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(onLongPress))
+
         touristMapView.addGestureRecognizer(longPressRecognizer)
         
-        setRegion()
+        getMapRegionFromStorage()
     }
     
     
-    @objc func onLongPress(sender: UIGestureRecognizer) {
+    @objc func onLongPress(sender: UILongPressGestureRecognizer) {
+        
         if (sender.state == .began){
             let location = sender.location(in: touristMapView)
             let locationOnMap = touristMapView.convert(location, toCoordinateFrom: touristMapView)
@@ -41,35 +44,38 @@ class MapViewController: UIViewController{
             // To add anotation
             let annotation = MKPointAnnotation()
             annotation.coordinate = locationOnMap
+            
+            impactFeedback(style: .heavy)
             self.touristMapView.addAnnotation(annotation)
         }
+        
     }
     
     // set map region (center coordinate and the span)
-    func setRegion(){
-        if let data = UserDefaults.standard.value(forKey: Constants.UserDefaults.region) as? [Double] {
-
-            let center = CLLocationCoordinate2D(latitude: data[0], longitude: data[1])
-            let span = MKCoordinateSpan(latitudeDelta: data[2], longitudeDelta: data[3])
-
-            let region = MKCoordinateRegion(center: center, span: span)
+    func getMapRegionFromStorage(){
+        if let data = UserDefaults.standard.value(forKey: Constants.UserDefaults.region) as? Data {
+            let region = localStorage.getRegion(data: data)
             touristMapView.setRegion(region, animated: true)
         }
     }
     
     
-    // save the map center coordinate and the span lat and long delta in a list
-    func saveRegion(region: MKCoordinateRegion) {
+    // save the map region to local storage
+    func persistMapRegion(region: MKCoordinateRegion) {
         let center = region.center
         let span = region.span
-        let data: [Double] = [center.latitude, center.longitude, span.latitudeDelta, span.longitudeDelta]
-        UserDefaults.standard.setValue(data, forKey: Constants.UserDefaults.region)
+        DispatchQueue.global().async {
+            let data = self.localStorage.setRegion(center: center, span: span)
+            UserDefaults.standard.setValue(data, forKey: Constants.UserDefaults.region)
+        }
+        
     }
     
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
         if(segue.identifier == Constants.SegueIdentifier.mapViewToPhotoView){
             let destination = segue.destination as! PhotoAlbumViewController
             destination.coordinate = sender as? CLLocationCoordinate2D
+            destination.currentSpan = touristMapView.region.span
         }
     }
 
@@ -79,7 +85,7 @@ class MapViewController: UIViewController{
 
 extension MapViewController: MKMapViewDelegate {
     func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
-        saveRegion(region: mapView.region)
+        persistMapRegion(region: mapView.region)
     }
     
     func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
@@ -90,6 +96,7 @@ extension MapViewController: MKMapViewDelegate {
         
         if pinView == nil {
             pinView = MKPinAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+            
         } else {
             pinView?.annotation = annotation
         }
@@ -99,7 +106,12 @@ extension MapViewController: MKMapViewDelegate {
     
     func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
         performSegue(withIdentifier: Constants.SegueIdentifier.mapViewToPhotoView, sender: view.annotation?.coordinate)
-        mapView.deselectAnnotation(view.annotation, animated: true)
+        view.setSelected(false, animated: false)
+        mapView.deselectAnnotation(view.annotation, animated: false)
     }
 }
 
+
+extension MapViewController: UIGestureRecognizerDelegate {
+   
+}
