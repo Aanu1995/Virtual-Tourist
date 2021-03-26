@@ -14,7 +14,7 @@ struct PhotoModel: Decodable {
         let page: Int
         let pages: Int
         let perPage: Int
-        let photoList: [Photo]
+        let photoList: [Image]
         
         enum CodingKeys: String, CodingKey {
             case page = "page"
@@ -25,7 +25,7 @@ struct PhotoModel: Decodable {
     }
 }
 
-struct Photo: Decodable {
+struct Image: Decodable {
     let id: String
     let imageUrl: String
     

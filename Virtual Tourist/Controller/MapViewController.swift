@@ -7,13 +7,19 @@
 
 import UIKit
 import MapKit
+import CoreData
 
 class MapViewController: UIViewController, HapticFeeback {
     
     // MARK: IBOutlets
     
     @IBOutlet weak var touristMapView: MKMapView!
+    
+    // MARK: Properties
+    
     let localStorage: LocalStorage = LocalStorageImpl()
+    var dataController: DataController!
+    var photoAlbumList: [PhotoAlbum] = []
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -21,19 +27,30 @@ class MapViewController: UIViewController, HapticFeeback {
     }
     
     override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(true)
         navigationController?.navigationBar.isHidden = true
+        setupFetchedResultsController()
     }
     
+    
     func configureMap(){
-       
         // add a gesture recognizer to the map
         let longPressRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(onLongPress))
-
         touristMapView.addGestureRecognizer(longPressRecognizer)
-        
+        setupFetchedResultsController()
         getMapRegionFromStorage()
     }
     
+    fileprivate func setupFetchedResultsController() {
+        let fetchRequest:NSFetchRequest<PhotoAlbum> = PhotoAlbum.fetchRequest()
+        
+        fetchRequest.sortDescriptors = []
+        if let result = try? dataController.viewContext.fetch(fetchRequest){
+            photoAlbumList = result
+            addAnnotations(photoAlbumList: result)
+        }
+       
+    }
     
     @objc func onLongPress(sender: UILongPressGestureRecognizer) {
         
@@ -57,6 +74,19 @@ class MapViewController: UIViewController, HapticFeeback {
             let region = localStorage.getRegion(data: data)
             touristMapView.setRegion(region, animated: true)
         }
+        
+        
+    }
+    
+    private func addAnnotations(photoAlbumList: [PhotoAlbum]){
+        var annotaions = [MKPointAnnotation]()
+        for photoAlbum in photoAlbumList {
+            let annotation = MKPointAnnotation()
+            annotation.coordinate = CLLocationCoordinate2D(latitude: photoAlbum.latitude, longitude: photoAlbum.longitude)
+            annotaions.append(annotation)
+        }
+        
+        touristMapView.addAnnotations(annotaions)
     }
     
     
@@ -76,6 +106,9 @@ class MapViewController: UIViewController, HapticFeeback {
             let destination = segue.destination as! PhotoAlbumViewController
             destination.coordinate = sender as? CLLocationCoordinate2D
             destination.currentSpan = touristMapView.region.span
+            destination.dataController = dataController
+            let photoAlbum = photoAlbumList.first {$0.latitude == destination.coordinate.latitude && $0.longitude == destination.coordinate.longitude}
+            destination.photoAlbum = photoAlbum
         }
     }
 
@@ -111,7 +144,3 @@ extension MapViewController: MKMapViewDelegate {
     }
 }
 
-
-extension MapViewController: UIGestureRecognizerDelegate {
-   
-}

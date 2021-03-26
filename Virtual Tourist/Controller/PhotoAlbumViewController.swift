@@ -7,6 +7,7 @@
 
 import UIKit
 import MapKit
+import CoreData
 
 class PhotoAlbumViewController: UIViewController, ErrorMessage {
     
@@ -18,18 +19,23 @@ class PhotoAlbumViewController: UIViewController, ErrorMessage {
     @IBOutlet weak var noImageLabel: UILabel!
     var activityIndicator = UIActivityIndicatorView(style: .medium)
 
+    // MARK: Properties
     
     var coordinate: CLLocationCoordinate2D!
     var currentSpan: MKCoordinateSpan!
     var photoservice: PhotoService!
-    
     var photos: PhotoModel?
-    var photoList: [Photo] = []
+    
+    var dataController: DataController!
+    var fetchedResultsController:NSFetchedResultsController<Photo>!
+    var photoAlbum: PhotoAlbum?
+    
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
         photoservice = PhotoServiceImpl()
+        setupFetchedResultsController()
         configure()
     }
     
@@ -37,12 +43,12 @@ class PhotoAlbumViewController: UIViewController, ErrorMessage {
         collectionView.collectionViewLayout.invalidateLayout()
     }
     
-    private func configure(){
+    private func configure() {
         navigationController?.navigationBar.isHidden = false
         activityIndicator.frame = CGRect(x: view.center.x - 23, y: view.center.y, width: 46, height: 46)
         view.addSubview(activityIndicator)
         configureMapView()
-        loadImagesFromServer()
+        loadImagesFromLocalStorage()
     }
     
     private func configureMapView(){
@@ -53,7 +59,35 @@ class PhotoAlbumViewController: UIViewController, ErrorMessage {
         mapView.addAnnotation(annotation)
     }
     
-    private func loadImagesFromServer(){
+    fileprivate func setupFetchedResultsController() {
+        guard let photoAlbum = photoAlbum else {
+            return
+        }
+        let fetchRequest: NSFetchRequest<Photo> = Photo.fetchRequest()
+        fetchRequest.sortDescriptors = []
+        let predicate = NSPredicate(format: "photoAlbum == %@", photoAlbum)
+        fetchRequest.predicate = predicate
+        
+        fetchedResultsController = NSFetchedResultsController(fetchRequest: fetchRequest, managedObjectContext: dataController.viewContext, sectionNameKeyPath: nil, cacheName: "\(coordinate.latitude)\(coordinate.longitude)")
+        fetchedResultsController.delegate = self
+
+        do {
+            try fetchedResultsController.performFetch()
+        } catch {
+            fatalError("The fetch could not be performed: \(error.localizedDescription)")
+        }
+    }
+
+    private func loadImagesFromLocalStorage() {
+        guard let _ = photoAlbum else {
+            loadImagesFromServer()
+            return
+        }
+        self.showTextMessageIfEmpty(isPhotoListEmpty: false)
+        self.collectionView.reloadData()
+    }
+    
+    private func loadImagesFromServer() {
         // shows loading indicator
         loading(true)
         var page = 1
@@ -74,12 +108,41 @@ class PhotoAlbumViewController: UIViewController, ErrorMessage {
         }
         
         self.photos = result
-        self.photoList = result?.photos.photoList ?? []
+        let photoList: [String] = result?.photos.photoList.map({$0.imageUrl}) ?? []
         // show message if photos is empty
-        self.noImagesText()
-       
-        self.collectionView.refreshControl?.endRefreshing()
-        self.collectionView.reloadData()
+        self.showTextMessageIfEmpty(isPhotoListEmpty: photoList.isEmpty)
+      
+            if (!photoList.isEmpty) {
+                if photoAlbum != nil {
+//                    let photoLength = fetchedResultsController.sections?[0].numberOfObjects
+//                    for i in 0..<photoLength! {
+//                        let photoToDelete = fetchedResultsController.object(at: IndexPath(row: i, section: 0))
+//                        dataController.viewContext.delete(photoToDelete)
+//                    }
+//                    try? dataController.viewContext.save()
+//                    for url in photoList {
+//                        let photo = Photo(context: dataController.viewContext)
+//                        photo.photoAlbum = photoAlbum
+//                        photo.photoURL = url
+//                    }
+//                    try? dataController.viewContext.save()
+                    
+                } else {
+                    let photoAlbum = PhotoAlbum(context: dataController.viewContext)
+                    photoAlbum.latitude = coordinate.latitude
+                    photoAlbum.longitude = coordinate.longitude
+                    try? dataController.viewContext.save()
+                    self.photoAlbum = photoAlbum
+                    setupFetchedResultsController()
+                    
+                    for url in photoList {
+                        let photo = Photo(context: dataController.viewContext)
+                        photo.photoAlbum = photoAlbum
+                        photo.photoURL = url
+                    }
+                    try? dataController.viewContext.save()
+                }
+            }
     }
     
     private func loading(_ isLoading: Bool){
@@ -98,8 +161,7 @@ class PhotoAlbumViewController: UIViewController, ErrorMessage {
         present(displayErrorAlert(message: message), animated: true)
     }
     
-    private func noImagesText(){
-        let isPhotoListEmpty = photoList.isEmpty
+    private func showTextMessageIfEmpty(isPhotoListEmpty: Bool){
         collectionView.isHidden = isPhotoListEmpty
         noImageLabel.isHidden = !isPhotoListEmpty
        
@@ -107,6 +169,12 @@ class PhotoAlbumViewController: UIViewController, ErrorMessage {
     
     @IBAction func getNewPhotos(_ sender: Any) {
         loadImagesFromServer()
+    }
+    
+    func deletePhoto(at indexPath: IndexPath) {
+        let photoToDelete = fetchedResultsController.object(at: indexPath)
+        dataController.viewContext.delete(photoToDelete)
+        try? dataController.viewContext.save()
     }
 }
 
@@ -130,21 +198,27 @@ extension PhotoAlbumViewController : MKMapViewDelegate {
 }
 
 extension PhotoAlbumViewController: CollectionViewProtocols{
+    func numberOfSections(in collectionView: UICollectionView) -> Int {
+        guard let fetchedResultsController = fetchedResultsController else {
+            return 0
+        }
+        return fetchedResultsController.sections?.count ?? 0
+    }
+    
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        return photoList.count
+        return fetchedResultsController.sections?[section].numberOfObjects ?? 0
     }
     
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: PhotoCollectionViewCell.identifier, for: indexPath) as! PhotoCollectionViewCell
         
-        let url = photoList[indexPath.row].imageUrl
+        let url = fetchedResultsController.object(at: indexPath).photoURL!
         photoservice.downloadImage(photoURL: url) { (data) in
             cell.configure(image: UIImage(data: data)!)
         }
         
         return cell
     }
-    
     
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize {
         let totalItems = 3
@@ -153,5 +227,32 @@ extension PhotoAlbumViewController: CollectionViewProtocols{
         let height = width + 20.0
         return CGSize(width: width, height: height)
     }
-  
+    
+    func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+        deletePhoto(at: indexPath)
+    }
+    
 }
+
+extension PhotoAlbumViewController : NSFetchedResultsControllerDelegate {
+    
+    func controller(_ controller: NSFetchedResultsController<NSFetchRequestResult>, didChange anObject: Any, at indexPath: IndexPath?, for type: NSFetchedResultsChangeType, newIndexPath: IndexPath?) {
+        switch type {
+        case .delete:
+            collectionView.deleteItems(at: [indexPath!])
+            break
+        case .insert:
+            collectionView.reloadData()
+            break
+        case .update:
+            collectionView.reloadData()
+            break
+        case .move:
+            break
+        default:
+            break
+        }
+    }
+}
+
+

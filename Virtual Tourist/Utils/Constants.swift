@@ -17,7 +17,7 @@ typealias CollectionViewProtocols = UICollectionViewDelegate & UICollectionViewD
 struct Constants {
     
     struct FlickrApi {
-        static let apiKey = ""
+        static let apiKey = "fd92039ce7f7fe617c5122bf45bb5626"
         static let baseUrl = "https://www.flickr.com/services/rest/"
         static let recentPhotos = "?method=flickr.photos.search&nojsoncallback=1"
     }
