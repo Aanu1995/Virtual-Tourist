@@ -18,38 +18,41 @@ class MapViewController: UIViewController, HapticFeeback {
     // MARK: Properties
     
     let localStorage: LocalStorage = LocalStorageImpl()
+    var photoservice: PhotoService!
     var dataController: DataController!
-    var photoAlbumList: [PhotoAlbum] = []
+    var fetchedResultsController:NSFetchedResultsController<Pin>!
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        photoservice = PhotoServiceImpl()
+        setupFetchedResultsController()
         configureMap()
     }
     
     override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(true)
         navigationController?.navigationBar.isHidden = true
-        setupFetchedResultsController()
     }
-    
     
     func configureMap(){
         // add a gesture recognizer to the map
         let longPressRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(onLongPress))
         touristMapView.addGestureRecognizer(longPressRecognizer)
-        setupFetchedResultsController()
         getMapRegionFromStorage()
     }
     
     fileprivate func setupFetchedResultsController() {
-        let fetchRequest:NSFetchRequest<PhotoAlbum> = PhotoAlbum.fetchRequest()
-        
+        let fetchRequest: NSFetchRequest<Pin> = Pin.fetchRequest()
         fetchRequest.sortDescriptors = []
-        if let result = try? dataController.viewContext.fetch(fetchRequest){
-            photoAlbumList = result
-            addAnnotations(photoAlbumList: result)
+        
+        fetchedResultsController = NSFetchedResultsController(fetchRequest: fetchRequest, managedObjectContext: dataController.viewContext, sectionNameKeyPath: nil, cacheName: "pin")
+        fetchedResultsController.delegate = self
+
+        do {
+            try fetchedResultsController.performFetch()
+            addAnnotations(pins: fetchedResultsController.fetchedObjects ?? [])
+        } catch {
+            fatalError("The fetch could not be performed: \(error.localizedDescription)")
         }
-       
     }
     
     @objc func onLongPress(sender: UILongPressGestureRecognizer) {
@@ -58,14 +61,24 @@ class MapViewController: UIViewController, HapticFeeback {
             let location = sender.location(in: touristMapView)
             let locationOnMap = touristMapView.convert(location, toCoordinateFrom: touristMapView)
             
-            // To add anotation
-            let annotation = MKPointAnnotation()
-            annotation.coordinate = locationOnMap
-            
-            impactFeedback(style: .heavy)
-            self.touristMapView.addAnnotation(annotation)
+            let pin = Pin(context: self.dataController.viewContext)
+            pin.latitude = locationOnMap.latitude
+            pin.longitude = locationOnMap.longitude
+            try? self.dataController.viewContext.save()
         }
         
+    }
+    
+    private func onPinAdded(indexPath: IndexPath) {
+        let pin = fetchedResultsController.object(at: indexPath)
+        let annotation = MKPointAnnotation()
+        annotation.coordinate = CLLocationCoordinate2D(latitude: pin.latitude, longitude: pin.longitude)
+        impactFeedback(style: .heavy)
+        touristMapView.addAnnotation(annotation)
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            self.fetchPhotosFromLocation(pin: pin, context: self.dataController.viewContext, service: self.photoservice)
+        }
     }
     
     // set map region (center coordinate and the span)
@@ -74,15 +87,13 @@ class MapViewController: UIViewController, HapticFeeback {
             let region = localStorage.getRegion(data: data)
             touristMapView.setRegion(region, animated: true)
         }
-        
-        
     }
     
-    private func addAnnotations(photoAlbumList: [PhotoAlbum]){
+    private func addAnnotations(pins: [Pin]){
         var annotaions = [MKPointAnnotation]()
-        for photoAlbum in photoAlbumList {
+        for pin in pins {
             let annotation = MKPointAnnotation()
-            annotation.coordinate = CLLocationCoordinate2D(latitude: photoAlbum.latitude, longitude: photoAlbum.longitude)
+            annotation.coordinate = CLLocationCoordinate2D(latitude: pin.latitude, longitude: pin.longitude)
             annotaions.append(annotation)
         }
         
@@ -104,15 +115,14 @@ class MapViewController: UIViewController, HapticFeeback {
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
         if(segue.identifier == Constants.SegueIdentifier.mapViewToPhotoView){
             let destination = segue.destination as! PhotoAlbumViewController
-            destination.coordinate = sender as? CLLocationCoordinate2D
             destination.currentSpan = touristMapView.region.span
             destination.dataController = dataController
-            let photoAlbum = photoAlbumList.first {$0.latitude == destination.coordinate.latitude && $0.longitude == destination.coordinate.longitude}
-            destination.photoAlbum = photoAlbum
+            let coord = sender as? CLLocationCoordinate2D
+            let pinList = fetchedResultsController.fetchedObjects!
+            let pin = pinList.first{$0.latitude == coord?.latitude && $0.longitude == coord?.longitude}
+            destination.pin = pin
         }
     }
-
-
 }
 
 
@@ -142,5 +152,38 @@ extension MapViewController: MKMapViewDelegate {
         view.setSelected(false, animated: false)
         mapView.deselectAnnotation(view.annotation, animated: false)
     }
+    
+    private func fetchPhotosFromLocation(pin: Pin, context: NSManagedObjectContext, service: PhotoService){
+        service.getAllPhotos(page: 1, latitude: pin.latitude, longitude: pin.longitude) { (photoModel, error) in
+            if let _ = error { return }
+        
+            let photoList: [String] = photoModel?.photos.photoList.map({$0.imageUrl}) ?? []
+            if (!photoList.isEmpty) {
+                for url in photoList {
+                    let photo = Photo(context: context)
+                    photo.pin = pin
+                    photo.photoURL = url
+                }
+                try? context.save()
+            }
+            
+        }
+    }
 }
+
+extension MapViewController : NSFetchedResultsControllerDelegate {
+    
+    func controller(_ controller: NSFetchedResultsController<NSFetchRequestResult>, didChange anObject: Any, at indexPath: IndexPath?, for type: NSFetchedResultsChangeType, newIndexPath: IndexPath?) {
+        switch type {
+        case .insert:
+            onPinAdded(indexPath: newIndexPath!)
+            break
+        case .delete, .update, .move:
+            break
+        default:
+            break
+        }
+    }
+}
+
 
