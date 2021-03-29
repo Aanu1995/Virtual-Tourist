@@ -9,7 +9,7 @@ import UIKit
 import MapKit
 import CoreData
 
-class PhotoAlbumViewController: UIViewController, ErrorMessage {
+class PhotoAlbumViewController: UIViewController, ErrorMessage, HapticFeeback {
     
     // MARK: IBOutlets
 
@@ -17,9 +17,10 @@ class PhotoAlbumViewController: UIViewController, ErrorMessage {
     @IBOutlet weak var collectionView: UICollectionView!
     @IBOutlet weak var newCollectionButton: UIButton!
     @IBOutlet weak var noImageLabel: UILabel!
-    var activityIndicator = UIActivityIndicatorView(style: .medium)
 
     // MARK: Properties
+    
+    var activityIndicator = UIActivityIndicatorView(style: .medium)
     
     var currentSpan: MKCoordinateSpan!
     var photoservice: PhotoService!
@@ -33,7 +34,7 @@ class PhotoAlbumViewController: UIViewController, ErrorMessage {
         super.viewDidLoad()
         photoservice = PhotoServiceImpl()
         setupFetchedResultsController()
-        configure()
+        configureUI()
     }
     
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
@@ -47,7 +48,7 @@ class PhotoAlbumViewController: UIViewController, ErrorMessage {
     }
 
     
-    private func configure() {
+    private func configureUI() {
         navigationController?.navigationBar.isHidden = false
         activityIndicator.frame = CGRect(x: view.center.x - 23, y: view.center.y, width: 46, height: 46)
         view.addSubview(activityIndicator)
@@ -82,7 +83,9 @@ class PhotoAlbumViewController: UIViewController, ErrorMessage {
 
     private func loadImagesFromLocalStorage() {
         let result = fetchedResultsController.fetchedObjects
-        guard let _ = result, result?.count ?? 0 > 0 else {
+        
+        if let result = result, result.isEmpty {
+            // fetch images from flickr if there are no images in the local storage
             fetchImagesFromServer()
             return
         }
@@ -93,38 +96,34 @@ class PhotoAlbumViewController: UIViewController, ErrorMessage {
     private func fetchImagesFromServer() {
         // shows loading indicator
         loading(true)
-        let page = Int.random(in: 1..<4)
-        print(page)
-        photoservice.getAllPhotos(page: page, latitude: pin.latitude, longitude: pin.longitude, completionHandler: onPhotosFetchingCompleted)
+        photoservice.getAllPhotos(latitude: pin.latitude, longitude: pin.longitude, completionHandler: onFetchingImagesCompleted)
     }
     
-    private func onPhotosFetchingCompleted(result: PhotoModel? , error: Error?) {
-        // hide loading indicators
-        self.loading(false)
-        if let error = error {
-            return showErrorMessage(message: error.localizedDescription)
-        }
-        
-        if(!(fetchedResultsController.fetchedObjects ?? []).isEmpty){
-            // remove all images in the store if exist
-            deleteAllPhotos()
-        }
-        
-        let photoList: [String] = result?.photos.photoList.map({$0.imageUrl}) ?? []
-        
-        // add all photos to the persistent store
-        if (!photoList.isEmpty) {
-            for url in photoList {
-                let photo = Photo(context: dataController.viewContext)
-                photo.pin = pin
-                photo.photoURL = url
+    private func onFetchingImagesCompleted(result: PhotoModel? , error: Error?) {
+        // remove all photos in the persistent store if exist
+        deleteAllPhotos {
+            // hide loading indicators
+            self.loading(false)
+            if let error = error {
+                return self.showErrorMessage(message: error.localizedDescription)
             }
-           try? dataController.viewContext.save()
-           collectionView.reloadData()
+            
+            let photoList: [String] = result?.photos.photoList.map({$0.imageUrl}) ?? []
+            
+            // add all photos to the persistent store
+            if (!photoList.isEmpty) {
+                for url in photoList {
+                    let photo = Photo(context: self.dataController.viewContext)
+                    photo.pin = self.pin
+                    photo.photoURL = url
+                }
+                try? self.dataController.viewContext.save()
+                self.collectionView.reloadData()
+            }
+            
+            // show message if photos is empty
+            self.showTextMessageIfEmpty(isPhotoListEmpty: photoList.isEmpty)
         }
-        
-        // show message if photos is empty
-        self.showTextMessageIfEmpty(isPhotoListEmpty: photoList.isEmpty)
     }
     
     private func loading(_ isLoading: Bool){
@@ -149,24 +148,29 @@ class PhotoAlbumViewController: UIViewController, ErrorMessage {
        
     }
     
-    @IBAction func getNewPhotos(_ sender: Any) {
-        fetchImagesFromServer()
-    }
-    
-    func deletePhoto(at indexPath: IndexPath) {
+    private func deletePhoto(at indexPath: IndexPath) {
         let photoToDelete = fetchedResultsController.object(at: indexPath)
         dataController.viewContext.delete(photoToDelete)
         try? dataController.viewContext.save()
     }
     
-    private func deleteAllPhotos() {
+    private func deleteAllPhotos(completionHandler: @escaping () -> Void ) {
         for photo in fetchedResultsController.fetchedObjects ?? [] {
             let indexPath = fetchedResultsController.indexPath(forObject: photo)
             deletePhoto(at: indexPath! )
         }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+           completionHandler()
+        }
+    }
+    
+    @IBAction func getNewPhotos(_ sender: Any) {
+        fetchImagesFromServer()
+        selectionFeedback()
     }
 }
 
+// MARK: MKMapView
 
 extension PhotoAlbumViewController : MKMapViewDelegate {
     
@@ -186,6 +190,8 @@ extension PhotoAlbumViewController : MKMapViewDelegate {
     }
 }
 
+// MARK: UICollectionView
+
 extension PhotoAlbumViewController: CollectionViewProtocols {
     
     func numberOfSections(in collectionView: UICollectionView) -> Int {
@@ -203,6 +209,7 @@ extension PhotoAlbumViewController: CollectionViewProtocols {
         if let image = photo.image {
             cell.configure(image: UIImage(data: image)!)
         } else {
+            // download image data and update if it doesn't exist in local storage
             if let photoURL = photo.photoURL {
                 photoservice.downloadImage(photoURL: photoURL) { (data) in
                     cell.configure(image: UIImage(data: data)!)
@@ -224,12 +231,16 @@ extension PhotoAlbumViewController: CollectionViewProtocols {
     
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         deletePhoto(at: indexPath)
+        selectionFeedback()
+        collectionView.deselectItem(at: indexPath, animated: true)
     }
     
 }
 
+// MARK: CoreData
+
 extension PhotoAlbumViewController : NSFetchedResultsControllerDelegate {
-    
+
     func controller(_ controller: NSFetchedResultsController<NSFetchRequestResult>, didChange anObject: Any, at indexPath: IndexPath?, for type: NSFetchedResultsChangeType, newIndexPath: IndexPath?) {
         switch type {
         case .delete:
@@ -242,5 +253,7 @@ extension PhotoAlbumViewController : NSFetchedResultsControllerDelegate {
         }
     }
 }
+
+
 
 

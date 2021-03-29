@@ -17,10 +17,10 @@ class MapViewController: UIViewController, HapticFeeback {
     
     // MARK: Properties
     
-    let localStorage: LocalStorage = LocalStorageImpl()
-    var photoservice: PhotoService!
+    private let localStorage: LocalStorage = LocalStorageImpl()
+    private var photoservice: PhotoService!
     var dataController: DataController!
-    var fetchedResultsController:NSFetchedResultsController<Pin>!
+    private var fetchedResultsController:NSFetchedResultsController<Pin>!
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -33,11 +33,13 @@ class MapViewController: UIViewController, HapticFeeback {
         navigationController?.navigationBar.isHidden = true
     }
     
-    func configureMap(){
+    fileprivate func configureMap(){
         // add a gesture recognizer to the map
         let longPressRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(onLongPress))
+        longPressRecognizer.minimumPressDuration = 1
+        
         touristMapView.addGestureRecognizer(longPressRecognizer)
-        getMapRegionFromStorage()
+        updateMapRegion()
     }
     
     fileprivate func setupFetchedResultsController() {
@@ -57,7 +59,7 @@ class MapViewController: UIViewController, HapticFeeback {
     
     @objc func onLongPress(sender: UILongPressGestureRecognizer) {
         
-        if (sender.state == .began){
+        if (sender.state == .began) {
             let location = sender.location(in: touristMapView)
             let locationOnMap = touristMapView.convert(location, toCoordinateFrom: touristMapView)
             
@@ -69,22 +71,25 @@ class MapViewController: UIViewController, HapticFeeback {
         
     }
     
-    private func onPinAdded(indexPath: IndexPath) {
+    private func addAnnotationOnPinAdded(indexPath: IndexPath) {
         let pin = fetchedResultsController.object(at: indexPath)
         let annotation = MKPointAnnotation()
         annotation.coordinate = CLLocationCoordinate2D(latitude: pin.latitude, longitude: pin.longitude)
         impactFeedback(style: .heavy)
         touristMapView.addAnnotation(annotation)
         
+        // fetch images after adding annotation
+        fetchImagesOnPinAdded(pin: pin)
+    }
+    
+    private func fetchImagesOnPinAdded(pin: Pin){
         DispatchQueue.global(qos: .userInitiated).async {
             self.fetchPhotosFromLocation(pin: pin, context: self.dataController.viewContext, service: self.photoservice)
         }
     }
     
-    // set map region (center coordinate and the span)
-    func getMapRegionFromStorage(){
-        if let data = UserDefaults.standard.value(forKey: Constants.UserDefaults.region) as? Data {
-            let region = localStorage.getRegion(data: data)
+    private func updateMapRegion(){
+        if let region = localStorage.getData() {
             touristMapView.setRegion(region, animated: true)
         }
     }
@@ -102,11 +107,11 @@ class MapViewController: UIViewController, HapticFeeback {
     
     
     // save the map region to local storage
-    func persistMapRegion(region: MKCoordinateRegion) {
+    private func saveCurrentMapRegion(region: MKCoordinateRegion) {
         let center = region.center
         let span = region.span
         DispatchQueue.global().async {
-            let data = self.localStorage.setRegion(center: center, span: span)
+            let data = self.localStorage.saveData(center: center, span: span)
             UserDefaults.standard.setValue(data, forKey: Constants.UserDefaults.region)
         }
         
@@ -123,12 +128,32 @@ class MapViewController: UIViewController, HapticFeeback {
             destination.pin = pin
         }
     }
+    
+    private func fetchPhotosFromLocation(pin: Pin, context: NSManagedObjectContext, service: PhotoService){
+        service.getAllPhotos(latitude: pin.latitude, longitude: pin.longitude) { (photoModel, error) in
+            if let _ = error { return }
+        
+            let photoList: [String] = photoModel?.photos.photoList.map({$0.imageUrl}) ?? []
+            if (!photoList.isEmpty) {
+                for url in photoList {
+                    let photo = Photo(context: context)
+                    photo.pin = pin
+                    photo.photoURL = url
+                }
+                try? context.save()
+            }
+            
+        }
+    }
 }
 
 
+// MARK: MkMapView
+
 extension MapViewController: MKMapViewDelegate {
+    
     func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
-        persistMapRegion(region: mapView.region)
+        saveCurrentMapRegion(region: mapView.region)
     }
     
     func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
@@ -152,31 +177,16 @@ extension MapViewController: MKMapViewDelegate {
         view.setSelected(false, animated: false)
         mapView.deselectAnnotation(view.annotation, animated: false)
     }
-    
-    private func fetchPhotosFromLocation(pin: Pin, context: NSManagedObjectContext, service: PhotoService){
-        service.getAllPhotos(page: 1, latitude: pin.latitude, longitude: pin.longitude) { (photoModel, error) in
-            if let _ = error { return }
-        
-            let photoList: [String] = photoModel?.photos.photoList.map({$0.imageUrl}) ?? []
-            if (!photoList.isEmpty) {
-                for url in photoList {
-                    let photo = Photo(context: context)
-                    photo.pin = pin
-                    photo.photoURL = url
-                }
-                try? context.save()
-            }
-            
-        }
-    }
 }
+
+// MARK: Core Data
 
 extension MapViewController : NSFetchedResultsControllerDelegate {
     
     func controller(_ controller: NSFetchedResultsController<NSFetchRequestResult>, didChange anObject: Any, at indexPath: IndexPath?, for type: NSFetchedResultsChangeType, newIndexPath: IndexPath?) {
         switch type {
         case .insert:
-            onPinAdded(indexPath: newIndexPath!)
+            addAnnotationOnPinAdded(indexPath: newIndexPath!)
             break
         case .delete, .update, .move:
             break

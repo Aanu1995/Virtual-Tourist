@@ -61,15 +61,6 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		CE4FDE4A2606967D0071E410 /* Repository */ = {
-			isa = PBXGroup;
-			children = (
-				CE4FDE4B260696B70071E410 /* LocalStorage.swift */,
-				CE47C7A12607944D00BDFA78 /* HapticFeedback.swift */,
-			);
-			path = Repository;
-			sourceTree = "<group>";
-		};
 		CE5567B926080F6300C579C6 /* Client */ = {
 			isa = PBXGroup;
 			children = (
@@ -92,6 +83,7 @@
 			isa = PBXGroup;
 			children = (
 				CEEEFAE325F1ABE20081A142 /* Virtual_Tourist.xcdatamodeld */,
+				CE4FDE4B260696B70071E410 /* LocalStorage.swift */,
 				CEE8F2E4260CB42F005FF46A /* DataController.swift */,
 			);
 			path = LocalStorage;
@@ -139,7 +131,6 @@
 		CEEEFAF325F1AD370081A142 /* Controller */ = {
 			isa = PBXGroup;
 			children = (
-				CE4FDE4A2606967D0071E410 /* Repository */,
 				CEEEFADA25F1ABE20081A142 /* AppDelegate.swift */,
 				CEEEFADC25F1ABE20081A142 /* SceneDelegate.swift */,
 				CEEEFADE25F1ABE20081A142 /* MapViewController.swift */,
@@ -161,6 +152,7 @@
 		CEEEFAFB25F22A520081A142 /* Utils */ = {
 			isa = PBXGroup;
 			children = (
+				CE47C7A12607944D00BDFA78 /* HapticFeedback.swift */,
 				CEEEFAFC25F22A6A0081A142 /* Constants.swift */,
 				CE5567B626080D4700C579C6 /* ErrorMessage.swift */,
 			);

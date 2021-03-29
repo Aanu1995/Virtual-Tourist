@@ -8,13 +8,14 @@
 import Foundation
 
 protocol PhotoService {
-    func getAllPhotos(page: Int, latitude: Double, longitude: Double, completionHandler: @escaping (PhotoModel?, Error?) -> Void )
+    func getAllPhotos(latitude: Double, longitude: Double, completionHandler: @escaping (PhotoModel?, Error?) -> Void )
     func downloadImage(photoURL: String, completionHandler handler: @escaping (_ data: Data) -> Void)
 }
 
 class PhotoServiceImpl: PhotoService {
     
-    func getAllPhotos(page: Int, latitude: Double, longitude: Double, completionHandler: @escaping (PhotoModel?, Error?) -> Void) {
+    func getAllPhotos(latitude: Double, longitude: Double, completionHandler: @escaping (PhotoModel?, Error?) -> Void) {
+        let page = Int.random(in: 1..<4)
         let url: URL = Endpoints.flickrPhotos(page, latitude, longitude).url
        
         
